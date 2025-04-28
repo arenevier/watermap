@@ -14,8 +14,9 @@
   <!-- leaflet-overpass-layer -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet-overpass-layer@2.9.0/dist/OverPassLayer.css"
     integrity="sha384-aH45DWEqx0JYHi2XO6fB8j1nsNq7mYwKrUdmZ90fq9CKrbf6zBWjrOF/lM/UqD/U" crossorigin="">
-  <script src="https://unpkg.com/leaflet-overpass-layer@2.9.0/dist/OverPassLayer.bundle.js"
-    integrity="sha384-y8LokzBxt1MZFpE+82mA1cTvIkknpW6X5RQeKxg81C6IPYxcP3WEkfksRMWc5g3s" crossorigin=""></script> 
+  <!-- <script src="https://unpkg.com/leaflet-overpass-layer@2.9.0/dist/OverPassLayer.bundle.js" -->
+    <!-- integrity="sha384-y8LokzBxt1MZFpE+82mA1cTvIkknpW6X5RQeKxg81C6IPYxcP3WEkfksRMWc5g3s" crossorigin=""></script> --> 
+    <script src="./OverPassLayer.bundle.js"></script>
 
   <!-- leaflet-locatecontrol -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet.locatecontrol@0.79.0/dist/L.Control.Locate.min.css"
@@ -75,7 +76,6 @@
     // markers I want: CircleMarker without popup.
     class OverPassLayerOptions {
       endpoint = overpassEndPoint;
-      timeout = 120 * 1000;
       constructor(minZoom, query, markerOptions) {
         this.minZoom = minZoom;
         this.query = query;
@@ -175,6 +175,19 @@
 
       L.control.locate({locateOptions: { enableHighAccuracy: true }}).addTo(map);
     }
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./water-worker.js')
+      .then(registration => {
+        console.log('Service Worker registered with scope:', registration.scope);
+      })
+      .catch(err => {
+        console.log('Service Worker registration failed:', err);
+      });
+  });
+}
+
   </script>
 
   <body onload="init()">
