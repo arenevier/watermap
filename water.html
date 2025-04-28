@@ -149,8 +149,52 @@
       return `<span style="color: rgb(${color.r}, ${color.g}, ${color.b})">${text}</span>`;
     }
 
+    function updateUrl(map) {
+      const center = map.getCenter();
+      const lat = center.lat.toFixed(5);
+      const lng = center.lng.toFixed(5);
+      const zoom = map.getZoom();
+      const newUrl = `${window.location.pathname}#${zoom}/${lat}/${lng}`;
+      window.history.replaceState({}, '', newUrl);
+    }
+
+    function initialPosition() {
+      const position = {
+        center: defaultPos,
+        zoom: defaultZoom,
+      };
+
+      const hash = window.location.hash.substring(1).split('/');
+      if (hash.length !== 3) {
+        return position;
+      }
+      const zoom = parseInt(hash[0]);
+      const lat = parseFloat(hash[1]);
+      const lng = parseFloat(hash[2]);
+      console.log('zoom', hash[0]);
+      if (isNaN(zoom) || isNaN(lat) || isNaN(lng)) {
+        return position;
+      }
+      if (zoom < 0 || zoom > 18) {
+        return position;
+      }
+      if (lat < -90 || lat > 90) {
+        return position;
+      }
+      if (lng < -180 || lng > 180) {
+        return position;
+      }
+      return {
+        center: [lat, lng],
+        zoom: zoom
+      };
+    }
+
     function init() {
-      const map = L.map('map').setView(defaultPos, defaultZoom);
+      const { center, zoom } = initialPosition();
+      const map = L.map('map').setView(center, zoom);
+      map.on('moveend', function() { updateUrl(map) });
+
       L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
