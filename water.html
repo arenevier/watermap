@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+  <title>map of water and restrooms</title>
+
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+
+  <!-- leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <!-- leaflet-overpass-layer -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-overpass-layer@2.9.0/dist/OverPassLayer.css"
+    integrity="sha384-aH45DWEqx0JYHi2XO6fB8j1nsNq7mYwKrUdmZ90fq9CKrbf6zBWjrOF/lM/UqD/U" crossorigin="">
+  <script src="https://unpkg.com/leaflet-overpass-layer@2.9.0/dist/OverPassLayer.bundle.js"
+    integrity="sha384-y8LokzBxt1MZFpE+82mA1cTvIkknpW6X5RQeKxg81C6IPYxcP3WEkfksRMWc5g3s" crossorigin=""></script> 
+
+  <!-- leaflet-locatecontrol -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.locatecontrol@0.79.0/dist/L.Control.Locate.min.css"
+    integrity="sha384-s1weW3rLvQEcQo1OenCYWESkNoaaT6C995dZ4jgUAt+qkjhTNQoN8mhu6ZwQzWNS" crossorigin="">
+  <script src="https://unpkg.com/leaflet.locatecontrol@0.79.0/dist/L.Control.Locate.min.js"
+    integrity="sha384-XF7O0sxpctKl96bCyBgbgdQbnHDg/ek0LdbWrVUmx/LPh4EDtdIsGculgF93z6wW" crossorigin=""></script>
+
+  <!-- leaflet-markercluster -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css"
+    integrity="sha384-lPzjPsFQL6te2x+VxmV6q1DpRxpRk0tmnl2cpwAO5y04ESyc752tnEWPKDfl1olr" crossorigin="">
+  <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"
+    integrity="sha384-RLIyj5q1b5XJTn0tqUhucRZe40nFTocRP91R/NkRJHwAe4XxnTV77FXy/vGLiec2" crossorigin=""></script>
+
+  <style>
+    body {
+      margin: 0;
+    }
+    #map {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      right: 0;
+    }
+  
+    .marker-cluster-large {
+       --marker-size: 50px;
+    }
+    .marker-cluster-medium {
+      --marker-size: 40px;
+    }
+    .marker-cluster-small {
+      --marker-size: 30px;
+    }
+
+    .marker-cluster div {
+      width: var(--marker-size);
+      height: var(--marker-size);
+      display: grid;
+      align-items: center;
+      text-align: center;
+      border-radius: calc(var(--marker-size) / 2);
+      font: calc(var(--marker-size) / 2 - 3px) "Helvetica Neue", Arial, Helvetica, sans-serif;
+      /* TODO: those margins are specified in marker cluster default css. Why? */
+      margin-left: 5px;
+      margin-top: 5px;
+   }
+  </style>
+
+  <script>
+    const overpassEndPoint =  'https://overpass-api.de/api/';
+
+    const defaultZoom = 13;
+    const defaultPos = [37.3, -122];
+
+    // I need to redefine onSuccess because it's the only way create the
+    // markers I want: CircleMarker without popup.
+    class OverPassLayerOptions {
+      endpoint = overpassEndPoint;
+      timeout = 120 * 1000;
+      constructor(minZoom, query, markerOptions) {
+        this.minZoom = minZoom;
+        this.query = query;
+        this.onSuccess = function (data) {
+          for (const elem of data.elements) {
+            // beginning of the loop is similar to https://github.com/GuillaumeAmat/leaflet-overpass-layer/blob/3805d47c0c35891c36b1ceba85f04d07fa757c7f/src/OverPassLayer.js#L27
+            let pos;
+
+            if (elem.id in this._ids) {
+              continue;
+            }
+
+            if (elem.type === 'node') {
+              pos = L.latLng(elem.lat, elem.lon);
+            } else if (elem.type === 'way') {
+              pos = L.latLng(elem.center.lat, elem.center.lon);
+            } else {
+              console.error('Unknown element type: ' + elem.type);
+              continue;
+            }
+
+            this._ids[elem.id] = true;
+
+            // this part is different from the original
+            const marker = new L.CircleMarker(pos, markerOptions);
+            this._markers.addLayer(marker);
+          }
+        }
+      }
+    }
+
+    function createMarkerIcon(cluster, color) {
+      const count = cluster.getChildCount();
+      let size = ' marker-cluster-';
+      // TODO: only 3 levels. Would it look better with a logarithmic scale?
+      if (count < 10) {
+        size += 'small';
+      } else if (count < 100) {
+        size += 'medium';
+      } else {
+        size += 'large';
+      }
+      const className = 'marker-cluster' + size;
+
+      const iconElement = L.DomUtil.create("div");
+      iconElement.innerHTML = `<span>${count}</span>`
+      iconElement.style.backgroundColor = `rgba(${color.r}, ${color.g}, ${color.b}, 0.3)`;
+      return new L.DivIcon({ html: iconElement, className });
+    }
+
+    function createLayer(amenity, color, map, display) {
+      const request = `(node({{bbox}})[amenity=${amenity}];);out skel;(way({{bbox}})[amenity=${amenity}];);out center;`;
+      const options = new OverPassLayerOptions(defaultZoom - 1, request, {radius: 8, color: `rgb(${color.r}, ${color.g}, ${color.b})`});
+      const layer = new L.OverPassLayer(options);
+
+      // We want to override OverPassLayer markers, and use MarkerClusterGroup instead of default FeatureGroup
+      layer.addTo(map);
+      layer._markers.remove();
+
+      layer._markers = L.markerClusterGroup({
+        showCoverageOnHover: false, 
+        iconCreateFunction: cluster => createMarkerIcon(cluster, color)
+      });
+      if (display) {
+        layer._markers.addTo(map);
+      }
+      return layer._markers;
+    }
+
+    function createSpanWithColor(text, color) {
+      return `<span style="color: rgb(${color.r}, ${color.g}, ${color.b})">${text}</span>`;
+    }
+
+    function init() {
+      const map = L.map('map').setView(defaultPos, defaultZoom);
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+      }).addTo(map);
+      const menuControl = L.control.layers({}).addTo(map);
+
+      const FireBrickColor = {r: 178, g: 34, b: 34};
+      const toiletMarkers = createLayer('toilets', FireBrickColor, map, true);
+      menuControl.addOverlay(toiletMarkers, createSpanWithColor('toilets', FireBrickColor));
+
+      const BlueColor = {r: 0, g: 0, b: 255};
+      const waterMarkers = createLayer('drinking_water', BlueColor, map, true);
+      menuControl.addOverlay(waterMarkers, createSpanWithColor('water points', BlueColor));
+
+      const GreenColor = {r: 0, g: 100, b: 0};
+      const showerMarkers = createLayer('shower', GreenColor, map, false);
+      menuControl.addOverlay(showerMarkers, createSpanWithColor('showers', GreenColor));
+
+      const PinkColor = {r: 255, g: 0, b: 255};
+      const bikeRepairStationMarkers = createLayer('bicycle_repair_station', PinkColor, map, false);
+      menuControl.addOverlay(bikeRepairStationMarkers, createSpanWithColor('bike repair stations', PinkColor));
+
+      L.control.locate({locateOptions: { enableHighAccuracy: true }}).addTo(map);
+    }
+  </script>
+
+  <body onload="init()">
+    <div id="map"></div>
+  </body>
+</html>

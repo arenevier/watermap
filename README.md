@@ -1,2 +1,3 @@
 # watermap
-global map of water and restrooms
+
+online version: https://renevier.net/maps/water.html
